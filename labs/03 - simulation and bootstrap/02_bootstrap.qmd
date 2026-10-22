@@ -1,0 +1,306 @@
+---
+title: "The Bootstrap"
+author: "Erik Štrumbelj"
+date: today
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    code-fold: show
+    code-tools: true
+    embed-resources: true
+    theme: cosmo
+execute:
+  warning: false
+  message: false
+---
+
+## The Non-Parametric Bootstrap: Simulating from a Single Sample
+
+In the previous section, we were in an ideal world: we knew the true data-generating process $F$ (e.g., $\text{Gamma}(2, 0.04)$), so we could call `rgamma()` as many times as we wanted.
+
+In genuine empirical science, we do not know $F$, and nature does not give us an `r*` function to draw new datasets. We are handed a single realized sample of size $n$.
+
+### The Bootstrap Analogy
+
+If our sample $y$ of size $n$ is an unbiased representation of the population, we can treat the sample as if it were the population, and simulate draws from it with replacement:
+
+To estimate the uncertainty of (almost) any statistic $\hat{\theta} = T(y)$:
+
+1. **Input:** A realized dataset of size $n$: $y = (y_1, \dots, y_n)$.
+2. **Resample:** Draw $n$ values with replacement from $y$ to form a bootstrap sample $y^*$.  
+   *(Because we draw with replacement, some original observations will appear twice or thrice, while others will be omitted).*
+3. **Compute:** Calculate the statistic on this resample: $\hat{\theta}^* = T(y^*)$.
+4. **Repeat:** Repeat Steps 2 and 3 a total of $B$ times (e.g., $B = 1000$) to generate the **Bootstrap Sampling Distribution**:
+   $$\{\hat{\theta}_1^*, \, \hat{\theta}_2^*, \, \dots, \, \hat{\theta}_B^*\}$$
+
+From this distribution, we extract two core quantifications of Tier 4 stochastic uncertainty:
+
+* **Bootstrap Standard Error:** The standard deviation of the simulated estimates:
+  $$\widehat{\text{SE}}_{\text{boot}}(\hat{\theta}) = \operatorname{sd}(\hat{\theta}^*)$$
+* **Percentile Confidence Interval:** The empirical cutoffs at $\alpha/2$ and $1 - \alpha/2$ (e.g., for a 95% CI, the 2.5th and 97.5th percentiles):
+  $$\text{CI}_{1-\alpha} = \left[ q_{\alpha/2}(\hat{\theta}^*), \; q_{1 - \alpha/2}(\hat{\theta}^*) \right]$$
+
+### Implementing Our Own Non-Parametric Bootstrap with Percentile CI
+
+Let's write a clean, general-purpose function in base R that accepts any dataset, any statistical functional, and our desired number of resamples $B$:
+
+```{r}
+#| label: my-bootstrap-function
+
+my_bootstrap <- function(data, stat_fn, B = 1000, conf = 0.95, seed = NULL) {
+  if (!is.null(seed)) set.seed(seed)
+  n <- length(data)
+  
+  # Step 1: Calculate the observed point estimate on the original sample
+  theta_hat <- stat_fn(data)
+  
+  # Steps 2 & 3: Resample with replacement B times and calculate stat_fn
+  boot_estimates <- numeric(B)
+  
+  for (b in 1:B) {
+    # Draw n observations WITH replacement from our single sample
+    resample <- sample(data, size = n, replace = TRUE)
+    # Compute the statistic on this specific bootstrap sample
+    boot_estimates[b] <- stat_fn(resample)
+  }
+  
+  # Step 4: Extract SE and empirical percentile CI bounds
+  se_boot <- sd(boot_estimates)
+  alpha <- 1 - conf
+  ci_lower <- quantile(boot_estimates, probs = alpha / 2, names = FALSE)
+  ci_upper <- quantile(boot_estimates, probs = 1 - alpha / 2, names = FALSE)
+  
+  list(
+    estimate  = theta_hat,
+    se        = se_boot,
+    ci        = c(lower = ci_lower, upper = ci_upper),
+    conf      = conf,
+    estimates = boot_estimates
+  )
+}
+```
+
+### Illustrating the Bootstrap Sampling Distribution
+
+```{r}
+#| label: fig-aligned-dgp-bootstrap
+#| fig-cap: "Top: Population DGP. Bottom: Bootstrap sampling distribution on the exact same horizontal scale, illustrating variance shrinkage (SE = 1.36 vs. SD = 14.1)."
+#| fig-width: 9
+#| fig-height: 7.5
+
+library(ggplot2)
+library(dplyr)
+library(patchwork)
+
+# -------------------------------------------------------------------------
+# 1. Setup & Data
+# -------------------------------------------------------------------------
+set.seed(1)
+n <- 50
+shape_val <- 2
+rate_val  <- 0.1
+true_mean <- shape_val / rate_val  # 20
+
+# Our single realized sample
+y <- rgamma(n = n, shape = shape_val, rate = rate_val)
+
+# Run bootstrap
+res <- my_bootstrap(y, stat_fn = mean, B = 2000, conf = 0.95, seed = 42)
+
+sample_mean <- res$estimate
+ci_low      <- unname(res$ci[1])
+ci_high     <- unname(res$ci[2])
+
+# Common horizontal scale for perfect alignment
+common_xlim   <- c(0, 65)
+common_breaks <- seq(0, 60, by = 10)
+
+# -------------------------------------------------------------------------
+# 2. Top Plot: The True Population (DGP)
+# -------------------------------------------------------------------------
+x_grid <- seq(0, 65, length.out = 500)
+df_dgp <- data.frame(
+  x = x_grid, 
+  density = dgamma(x_grid, shape = shape_val, rate = rate_val)
+)
+df_sample <- data.frame(y = y)
+
+p_dgp <- ggplot(df_dgp, aes(x = x, y = density)) +
+  geom_line(color = "#2c3e50", linewidth = 1.2) +
+  geom_area(fill = "#34495e", alpha = 0.15) +
+  # Observed sample tick marks
+  geom_rug(data = df_sample, aes(x = y), inherit.aes = FALSE, color = "#2980b9", linewidth = 0.7, alpha = 0.8) +
+  # Reference vertical lines
+  geom_vline(xintercept = true_mean, color = "#27ae60", linewidth = 1.1, linetype = "dashed") +
+  geom_vline(xintercept = sample_mean, color = "#e67e22", linewidth = 1.1, linetype = "dotted") +
+  # Labels
+  annotate("label", x = true_mean, y = 0.033, label = paste0("True Mean (μ = ", true_mean, ")"),
+           color = "#27ae60", fill = "white", fontface = "bold", size = 3.3, hjust = -0.08) +
+  annotate("label", x = sample_mean, y = 0.026, label = paste0("Sample Mean (ȳ = ", round(sample_mean, 1), ")"),
+           color = "#d35400", fill = "white", fontface = "bold", size = 3.3, hjust = 1.08) +
+  scale_x_continuous(limits = common_xlim, breaks = common_breaks) +
+  labs(
+    title = "1. The True Data Generating Process: Gamma(shape = 2, rate = 0.1)",
+    subtitle = paste0("Population SD = ", round(sqrt(shape_val / rate_val^2), 1), " | Blue tick marks show our single sample (n = 50)"),
+    x = "Individual Observation (x)",
+    y = "Population Density f(x)"
+  ) +
+  theme_minimal(base_size = 11) +
+  theme(plot.title = element_text(face = "bold"))
+
+# -------------------------------------------------------------------------
+# 3. Bottom Plot: Bootstrap Sampling Distribution (Aligned)
+# -------------------------------------------------------------------------
+df_boot <- tibble(theta_star = res$estimates) |> 
+  mutate(
+    region = case_when(
+      theta_star < ci_low  ~ "Tail (Bottom 2.5%)",
+      theta_star > ci_high ~ "Tail (Top 2.5%)",
+      TRUE                 ~ "Retained (Middle 95%)"
+    )
+  )
+
+p_boot <- ggplot(df_boot, aes(x = theta_star)) +
+  # Explicit binwidth keeps histogram smooth on the wide 0-65 axis
+  geom_histogram(aes(fill = region), binwidth = 0.35, color = "white", alpha = 0.85) +
+  
+  # Vertically aligned reference lines
+  geom_vline(xintercept = true_mean, color = "#27ae60", linewidth = 1.1, linetype = "dashed") +
+  geom_vline(xintercept = sample_mean, color = "#e67e22", linewidth = 1.1, linetype = "dotted") +
+  
+  # CI boundary lines & top bracket
+  geom_vline(xintercept = c(ci_low, ci_high), color = "#2c3e50", linewidth = 0.8) +
+  annotate("segment", x = ci_low, xend = ci_high, y = Inf, yend = Inf, 
+           color = "#2c3e50", linewidth = 3) +
+  
+  # Annotations
+  annotate("label", x = true_mean, y = Inf, vjust = 1.6,
+           label = paste0("True μ = ", true_mean), 
+           color = "#27ae60", fill = "white", fontface = "bold", size = 3.2) +
+  annotate("text", x = ci_low, y = 0, vjust = -1, hjust = 1.1,
+           label = paste0("2.5%\n", round(ci_low, 1)), color = "#c0392b", fontface = "bold", size = 3) +
+  annotate("text", x = ci_high, y = 0, vjust = -1, hjust = -0.1,
+           label = paste0("97.5%\n", round(ci_high, 1)), color = "#c0392b", fontface = "bold", size = 3) +
+  
+  scale_x_continuous(limits = common_xlim, breaks = common_breaks) +
+  scale_fill_manual(
+    name = "Bootstrap Resamples:",
+    values = c(
+      "Retained (Middle 95%)" = "#2980b9",
+      "Tail (Bottom 2.5%)"    = "#e74c3c",
+      "Tail (Top 2.5%)"       = "#e74c3c"
+    )
+  ) +
+  labs(
+    title = "2. Bootstrap Sampling Distribution of the Sample Mean (ȳ*)",
+    subtitle = paste0(
+      "B = 2,000 resamples | Bootstrap SE = ", round(res$se, 2), 
+      " | 95% Percentile CI: [", round(ci_low, 1), ", ", round(ci_high, 1), "]"
+    ),
+    x = "Bootstrap Sample Mean (ȳ*)",
+    y = "Count"
+  ) +
+  theme_minimal(base_size = 11) +
+  theme(
+    legend.position = "top",
+    panel.grid.minor = element_blank(),
+    plot.title = element_text(face = "bold")
+  )
+
+# -------------------------------------------------------------------------
+# 4. Display Stacked & Perfectly Aligned
+# -------------------------------------------------------------------------
+p_dgp / p_boot
+```
+
+### Comparing it with the *boot* Package
+
+```{r}
+library(boot)
+library(knitr)
+
+# -------------------------------------------------------------------------
+# 1. Setup & Data Generation
+# -------------------------------------------------------------------------
+set.seed(1)
+n <- 50
+shape <- 2
+rate  <- 0.1
+# True DGP
+y <- rgamma(n = n, shape = shape, rate = rate)
+
+true_mean   <- shape / rate                            # 20
+true_var    <- shape / (rate^2)                        # 200
+true_median <- qgamma(0.5, shape = shape, rate = rate)   # ~16.78
+
+B <- 1000
+
+# -------------------------------------------------------------------------
+# 2. Callback Functions Required by the `boot` Library: function(data, indices)
+# -------------------------------------------------------------------------
+boot_fn_mean   <- function(d, i) mean(d[i])
+boot_fn_median <- function(d, i) median(d[i])
+boot_fn_var    <- function(d, i) var(d[i])
+
+# -------------------------------------------------------------------------
+# 3. Run Both Implementations
+# -------------------------------------------------------------------------
+# A. Mean
+our_mean     <- my_bootstrap(y, stat_fn = mean, B = B)
+lib_mean     <- boot(data = y, statistic = boot_fn_mean, R = B)
+ci_mean      <- boot.ci(lib_mean, conf = 0.95, type = c("perc", "bca"))
+
+# B. Median
+our_median     <- my_bootstrap(y, stat_fn = median, B = B)
+lib_median     <- boot(data = y, statistic = boot_fn_median, R = B)
+ci_median      <- boot.ci(lib_median, conf = 0.95, type = c("perc", "bca"))
+
+# C. Variance
+our_var     <- my_bootstrap(y, stat_fn = var, B = B, seed = 1)
+lib_var     <- boot(data = y, statistic = boot_fn_var, R = B)
+ci_var      <- boot.ci(lib_var, conf = 0.95, type = c("perc", "bca"))
+
+# -------------------------------------------------------------------------
+# 4. Assemble Comparison Table
+# -------------------------------------------------------------------------
+# Helper function to format intervals cleanly
+fmt_ci <- function(lower, upper) {
+  if (is.null(lower) || is.na(lower)) return("N/A")
+  sprintf("[%.2f, %.2f]", lower, upper)
+}
+
+# Pull estimates: uses $original if it exists, otherwise computes directly from y
+est_mean   <- mean(y)
+est_median <- median(y)
+est_var    <- var(y)
+
+comparison_table <- data.frame(
+  Functional   = c("Mean", "Median", "Variance"),
+  True_Value   = round(c(true_mean, true_median, true_var), 2),
+  Estimate     = round(c(est_mean, est_median, est_var), 2),
+  our_SE   = round(c(our_mean$se, our_median$se, our_var$se), 2),
+  Boot_SE      = round(c(sd(lib_mean$t), sd(lib_median$t), sd(lib_var$t)), 2),
+  our_Perc = c(
+    fmt_ci(our_mean$ci[1], our_mean$ci[2]),
+    fmt_ci(our_median$ci[1], our_median$ci[2]),
+    fmt_ci(our_var$ci[1], our_var$ci[2])
+  ),
+  Boot_Perc    = c(
+    fmt_ci(ci_mean$percent[4], ci_mean$percent[5]),
+    fmt_ci(ci_median$percent[4], ci_median$percent[5]),
+    fmt_ci(ci_var$percent[4], ci_var$percent[5])
+  ),
+  Boot_BCa     = c(
+    fmt_ci(ci_mean$bca[4], ci_mean$bca[5]),
+    fmt_ci(ci_median$bca[4], ci_median$bca[5]),
+    fmt_ci(ci_var$bca[4], ci_var$bca[5])
+  )
+)
+
+print(comparison_table)
+
+# NOTE: Variance is more difficult to estimate that the mean. This is especially true for skewed distributions like this Gamma.
+# This example shows us how precentile CIs can fail in such cases, when the sample size is relatively small. However, percentile
+# intervals are primarily a pedagogical tool and better alternatives exist, such as BCa or double bootstrap.
+```

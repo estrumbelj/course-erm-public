@@ -1,0 +1,367 @@
+---
+title: "Working with Probability Distributions in R"
+author: "Erik Štrumbelj"
+date: today
+format:
+  html:
+    toc: true
+    toc-depth: 3
+    code-fold: show
+    code-tools: true
+    embed-resources: true
+    theme: cosmo
+execute:
+  warning: false
+  message: false
+---
+
+## The R Distribution Functions: `d`, `p`, `q`, `r`
+
+Every probability distribution in R uses a standardized naming convention: a one-letter prefix attached to a root distribution name (e.g., `norm`, `gamma`, `binom`, `pois`).
+
+| Prefix | Name | Mathematical Meaning | The Practical Question It Answers |
+|:---:|:---|:---|:---|
+| **`d`** | **Density / Mass**         | $f(x) = P(X = x)$ or curve height | *"What is the height of the probability density curve at $x$?"* |
+| **`p`** | **Probability (CDF)**      | $F(x) = P(X \le x)$               | *"What is the probability of observing a value less than or equal to $x$?"*|
+| **`q`** | **Quantile (Inverse CDF)** | $x$ such that $P(X \le x) = p$    | *"What cutoff value $x$ leaves a fraction $p$ of the distribution to its left?"* |
+| **`r`** | **Random Generation**      | $X_i \sim F$                      | *"Generate $n$ independent synthetic draws from this distribution."* |
+
+### Demonstrating on the Standard Normal Distribution $\mathcal{N}(0, 1)$
+
+```{r}
+
+#| label: fig-normal-grammar
+#| fig-cap: "The 4 R distribution operations visualized on the standard Normal distribution."
+#| fig-height: 7
+#| fig-width: 9
+
+library(ggplot2)
+library(patchwork)
+
+x_vals <- seq(-3.5, 3.5, length.out = 500)
+df_norm <- data.frame(x = x_vals, density = dnorm(x_vals))
+
+# Plot 1: dnorm
+p_d <- ggplot(df_norm, aes(x, density)) +
+  geom_line(color = "#2c3e50", linewidth = 1) +
+  annotate("segment", x = 1, xend = 1, y = 0, yend = dnorm(1), color = "#e74c3c", linetype = "dashed") +
+  annotate("point", x = 1, y = dnorm(1), color = "#e74c3c", size = 3) +
+  annotate("text", x = 1.2, y = dnorm(1), label = "dnorm(1)", hjust = 0, color = "#e74c3c") +
+  labs(title = "1. Density: dnorm(x)", subtitle = "Height of the curve at point x", y = "Density f(x)") +
+  theme_minimal()
+
+# Plot 2: pnorm
+p_p <- ggplot(df_norm, aes(x, density)) +
+  geom_line(color = "#2c3e50", linewidth = 1) +
+  geom_ribbon(data = subset(df_norm, x <= 1), aes(ymin = 0, ymax = density), fill = "#3498db", alpha = 0.4) +
+  geom_vline(xintercept = 1, color = "#2980b9", linetype = "dashed") +
+  annotate("text", x = 0, y = 0.15, label = "pnorm(1) ≈ 0.841", fontface = "bold", color = "#2980b9") +
+  labs(title = "2. Cumulative Probability: pnorm(q)", subtitle = "Area under the curve to the left of q", y = "Density f(x)") +
+  theme_minimal()
+
+# Plot 3: qnorm
+p_q <- ggplot(df_norm, aes(x, density)) +
+  geom_line(color = "#2c3e50", linewidth = 1) +
+  geom_ribbon(data = subset(df_norm, x <= qnorm(0.975)), aes(ymin = 0, ymax = density), fill = "#27ae60", alpha = 0.3) +
+  geom_vline(xintercept = qnorm(0.975), color = "#27ae60", linewidth = 1) +
+  annotate("text", x = qnorm(0.975) - 0.2, y = 0.35, label = "qnorm(0.975) ≈ 1.96", hjust = 1, color = "#27ae60", fontface = "bold") +
+  labs(title = "3. Quantile: qnorm(p)", subtitle = "Find x given area p = 0.975", y = "Density f(x)") +
+  theme_minimal()
+
+# Plot 4: rnorm
+set.seed(1)
+df_r <- data.frame(draws = rnorm(500))
+p_r <- ggplot(df_r, aes(x = draws)) +
+  geom_histogram(aes(y = after_stat(density)), bins = 30, fill = "#9b59b6", color = "white", alpha = 0.6) +
+
+  labs(title = "4. Random Draws: rnorm(n)", subtitle = "500 empirical realizations vs true curve", y = "Density") +
+  theme_minimal()
+
+(p_d + p_p) / (p_q + p_r)
+```
+### Standard Distributions in R
+
+Distributions are the building blocks of statistical simulation and modeling. We should be comfortable with the shapes, parameters, and properties (min/max, mean, variance) of all standard distributions.
+
+```{r}
+#| label: fig-standard-distributions
+#| fig-cap: "The 16 standard base-R probability distributions (1,000 samples each)."
+#| fig-width: 12
+#| fig-height: 12
+#| out-width: "100%"
+
+library(dplyr)
+library(tidyr)
+
+set.seed(1)
+n <- 10000
+
+# 1. Generate 1,000 draws for all 16 standard base R distributions
+dist_data <- tibble(
+  # Continuous: Symmetric & General
+  `Normal`       = rnorm(n, mean = 0, sd = 1),
+  `Uniform`      = runif(n, min = 0, max = 1),
+  `Student's t`  = rt(n, df = 4),
+  `Logistic`     = rlogis(n, location = 0, scale = 1),
+  
+  # Continuous: Skewed & Positive
+  `Exponential`  = rexp(n, rate = 1),
+  `Gamma`        = rgamma(n, shape = 2, rate = 1),
+  `Log-Normal`   = rlnorm(n, meanlog = 0, sdlog = 0.5),
+  `Weibull`      = rweibull(n, shape = 1.5, scale = 1),
+  
+  # Continuous: Bounded & Test Statistics
+  `Beta`         = rbeta(n, shape1 = 2, shape2 = 5),
+  `Chi-Squared`  = rchisq(n, df = 4),
+  `F`            = rf(n, df1 = 5, df2 = 15),
+  
+  # Discrete (Counts & Events)
+  `Poisson`           = rpois(n, lambda = 4),
+  `Binomial`          = rbinom(n, size = 20, prob = 0.5),
+  `Geometric`         = rgeom(n, prob = 0.25),
+  `Negative Binomial` = rnbinom(n, size = 5, prob = 0.3),
+  `Hypergeometric   ` = rhyper(n, m = 20, n = 30, k = 10)
+) |> 
+  pivot_longer(everything(), names_to = "distribution", values_to = "value")
+
+# 2. Plot faceted histograms
+ggplot(dist_data, aes(x = value)) +
+  geom_histogram(bins = 50, fill = "#2c3e50", color = "white", alpha = 0.85) +
+  facet_wrap(~ distribution, scales = "free", ncol = 4) +
+  labs(
+    title = "The 16 Standard Base-R Distributions",
+    subtitle = paste("Histograms of n =", n, "synthetic draws each using the r* function family"),
+    x = "",
+    y = ""
+  ) +
+  theme_minimal(base_size = 11) +
+  theme(
+    strip.text = element_text(face = "bold", size = 8.5),
+    strip.background = element_rect(fill = "#ecf0f1", color = NA),
+    panel.spacing = unit(0.9, "lines"),
+    axis.text = element_text(size = 7.5)
+  )
+```
+
+## Beware the Parameterization: Code vs. Textbook Notation
+
+One of the most common and dangerous errors in computational statistics is assuming that software function arguments match textbook notation. 
+
+Passing the wrong parameter is a silent bug. R will not throw an error or crash, it will happily run your code and produce mathematically invalid results.
+
+### Example 1: Normal Distribution Uses Standard Deviation, Not Variance
+
+In mathematical textbooks, the Gaussian distribution is almost universally written in terms of **variance** ($\sigma^2$):
+
+$$X \sim \mathcal{N}(\mu, \, \sigma^2)$$
+
+In R, however, `rnorm()` expects the standard deviation ($\sigma$):
+
+```{r}
+#| label: param-trap-normal
+
+# Suppose theoretical variance is sigma^2 = 16 (so sd = 4)
+
+# WRONG: Passing variance 16 directly
+wrong_draws <- rnorm(10000, mean = 0, sd = 16)
+var(wrong_draws)  # Result: ~256 (16 times larger than intended!)
+
+# CORRECT: Passing standard deviation sqrt(16) = 4
+correct_draws <- rnorm(10000, mean = 0, sd = 4)
+var(correct_draws) # Result: ~16
+```
+
+### Example 2: The Gamma Distribution Has Two Competing Parameterizations
+
+Textbooks define the Gamma distribution in two mathematically equivalent, but computationally inverted ways (for $x > 0$):
+
+$$
+\begin{aligned}
+\textbf{1. Shape-Rate } (k, \beta): \quad 
+&f(x; k, \beta) = \frac{\beta^k}{\Gamma(k)} x^{k-1} e^{-\beta x} \\[0.5em]
+&\mathbb{E}[X] = \frac{k}{\beta}, \qquad \operatorname{Var}(X) = \frac{k}{\beta^2} \\[1.2em]
+\textbf{2. Shape-Scale } (k, \theta): \quad 
+&f(x; k, \theta) = \frac{1}{\Gamma(k)\theta^k} x^{k-1} e^{-x/\theta} \\[0.5em]
+&\mathbb{E}[X] = k\theta, \qquad \operatorname{Var}(X) = k\theta^2
+\end{aligned}
+$$
+
+where $\theta = \frac{1}{\beta}$ ($\text{scale} = \frac{1}{\text{rate}}$).
+
+R supports both, but its positional default is rate:
+
+```{r}
+#| label: param-trap-gamma
+
+# Suppose shape = 2, and our scale = 4 (implying rate = 1/4 = 0.25)
+# Theoretical mean should be: shape * scale = 2 * 4 = 8
+
+# DANGEROUS: Relying on positional matching
+draws_unnamed <- rgamma(10000, 2, 4)
+mean(draws_unnamed)  # Result: ~0.5 (R treated 4 as RATE: 2 / 4 = 0.5!)
+
+# SAFE: Always explicitly name your arguments
+draws_named <- rgamma(10000, shape = 2, scale = 4)
+mean(draws_named)    # Result: ~8.0 (Correct)
+```
+
+### Example 3: Binomial(n, p) (n vs. size)
+
+This is an common source of confusion because the letter $n$ means two different things in math versus in R:
+
+In Math Textbooks $n$ means the number of trials $X \sim \text{Binomial}(n, p)$. In R the argument `n` always means how many random numbers to generate. 
+
+Because R uses `n` for the number of simulated draws, it renames the textbook parameter $n$ (trials) to `size`:
+
+```{r}
+# Generating 5 experiments of flipping 20 coins with p = 0.5:
+rbinom(n = 5, size = 20, prob = 0.5)  # CORRECT
+```
+
+If you mix them up, you simulate 20 experiments of flipping 5 coins!
+
+In general, do not rely on positional arguments for distribution functions. Always check ?r<dist> and explicitly name your parameters (e.g., rgamma(n, shape = 2, rate = 0.04) or rnorm(n, mean = 0, sd = 4)).
+    
+## Understanding Distributions by Sampling
+
+A central insight of computational statistics is that we do not need to solve calculus integrals to understand a probability distribution. As long as we have a mechanism to generate pseudo-random draws (`r*`), the **Law of Large Numbers (LLN)** guarantees that empirical sample properties converge to their theoretical counterparts.
+
+Whether you need a mean, a variance, a percentile, or the probability of falling into a complex region, sampling is usually all you need. Keep in mind, however, that analytical solutions and approximations remain indispensable: when available, they are faster, mathematically exact, and immune to simulation noise. Furthermore, sampling has genuine blind spots where it can fail. In practice, the two tools complement each other: theory gives us exact benchmarks, while simulation serves as both a universal fallback and quick sanity check on our equations.
+
+### Estimating Any Property in Seconds
+
+Suppose a physical process follows a $\text{Gamma}(\text{shape} = 2, \text{rate} = 0.04)$ distribution. Instead of looking up integration tables or deriving moment-generating functions, we simply draw $N = 20000$ numbers and compute sample statistics:
+
+```{r}
+#| label: simulation-estimation-demo
+
+set.seed(1)
+n <- 20000
+
+sim_draws <- rgamma(n = n, shape = 2, rate = 0.04) # scale = 1 / race
+
+# 1. Mean: E[X] = shape * scale
+sim_mean   <- mean(sim_draws)
+exact_mean <- 2 / 0.04
+
+# 2. Variance: Var(X) = shape * (scale^2)
+sim_var   <- var(sim_draws)
+exact_var <- 2 / (0.04^2)
+
+# 3. Arbitrary non-linear property: P(X > 80 ms)
+sim_prob   <- mean(sim_draws > 80)
+exact_prob <- 1 - pgamma(80, shape = 2, rate = 0.04)
+
+# 4. Asymmetric Spread: Interquartile Range (IQR = Q75 - Q25)
+sim_iqr   <- IQR(sim_draws)
+exact_iqr <- qgamma(0.75, 2, 0.04) - qgamma(0.25, 2, 0.04)
+
+# Comparison table
+comparison_df <- data.frame(
+  Property       = c("Mean (E[X])", "Variance (Var[X])", "P(X > 80 ms)", "IQR (Q75 - Q25)"),
+  Exact_Theory   = c(exact_mean, exact_var, exact_prob, exact_iqr),
+  Simulated_Est  = c(sim_mean, sim_var, sim_prob, sim_iqr),
+  Abs_Error      = abs(c(exact_mean, exact_var, exact_prob, exact_iqr) - 
+                       c(sim_mean, sim_var, sim_prob, sim_iqr))
+)
+
+knitr::kable(comparison_df, digits = 4, caption = "Theoretical Truth vs. 20,000 Simulation Draws")
+```
+
+For practical decision-making, the simulation error is negligible.
+
+### Where Simulation Fails
+
+While skewed and heavy-tailed distributions simply require larger sample sizes to stabilize, in some scenarios standard simulation breaks down entirely:
+
+#### Undefined Moments
+
+The Cauchy distribution (rcauchy()) has such extreme, heavy tails that its theoretical mean and variance do not exist. If we attempt to estimate the mean by simulation, our running average will never stabilize, no matter how many samples we take.
+
+```{r}
+#| label: fig-cauchy-vs-normal
+#| fig-cap: "Cumulative sample mean as N increases. Normal converges steadily to 0; Cauchy jumps erratically forever because its theoretical mean does not exist."
+#| fig-width: 9
+#| fig-height: 4.5
+
+set.seed(123)
+n_steps <- 10000
+
+# Generate sequential draws
+norm_draws   <- rnorm(n_steps, mean = 0, sd = 1)
+cauchy_draws <- rcauchy(n_steps, location = 0, scale = 1)
+
+# Compute cumulative running averages
+df_running <- data.frame(
+  n = 1:n_steps,
+  Normal = cumsum(norm_draws) / (1:n_steps),
+  Cauchy = cumsum(cauchy_draws) / (1:n_steps)
+) |> 
+  tidyr::pivot_longer(cols = c("Normal", "Cauchy"), names_to = "Distribution", values_to = "Running_Mean")
+
+ggplot(df_running, aes(x = n, y = Running_Mean, color = Distribution)) +
+  geom_line(linewidth = 0.8) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "black") +
+  scale_color_manual(values = c("Normal" = "#2980b9", "Cauchy" = "#e74c3c")) +
+  scale_x_log10(labels = scales::comma) +
+  coord_cartesian(ylim = c(-5, 5)) +
+  labs(
+    title = "Failure Mode 1: When Theoretical Moments Do Not Exist",
+    subtitle = "Running average of Normal(0, 1) vs. Cauchy(0, 1) over 10,000 samples",
+    x = "Sample Size N (log scale)",
+    y = "Cumulative Sample Mean"
+  ) +
+  theme_minimal(base_size = 12)
+```
+Important lesson: Simulation cannot compute a number that does not mathematically exist.
+
+#### Rare Events (Extreme Tail Probabilities)
+
+Naive simulation fails for rare events because accurately estimating a probability $p$ requires a sample size substantially larger than its inverse ($N \gg 1/p$). When $N \ll 1/p$, the expected number of observed occurrences is less than one, meaning the simulation almost always records zero hits and yields an estimate of $\hat{p} = 0$.
+
+For example, for $X \sim \mathcal{N}(0, 1)$, the true tail probability is:
+$$P(X > 4.5) \approx 3.4 \times 10^{-6} \quad \left(\approx \frac{1}{294000}\right)$$
+
+If we draw a typical sample of $N = 10000$, the expected number of observed hits is:
+$$\mathbb{E}[\text{hits}] = 10000 \times 3.4 \times 10^{-6} = 0.034$$
+
+Because observing even a single value above $4.5$ is highly unlikely, the simulation almost certainly returns $\hat{p} = 0$—completely missing the tail probability.
+
+```{r}
+#| label: demo-rare-event
+
+set.seed(42)
+N <- 10000
+c <- 4.5
+
+# 1. Theoretical probability: P(X > 4.5)
+true_p <- 1 - pnorm(c)
+
+# 2. Simulated estimate from N = 10,000 draws
+draws <- rnorm(N)
+sim_p <- mean(draws > c)
+
+cat("True P(X > 4.5):    ", format(true_p, scientific = TRUE), "\n")
+cat("Simulated Estimate: ", sim_p, "\n")
+cat("Observed Hits:      ", sum(draws > c), "out of", N, "\n")
+```
+
+#### Boundary Estimators
+
+Unlike the mean, which sample estimates bounce around, the sample maximum is strictly one-sided: any finite sample is guaranteed to underestimate the true boundary from below. While for bounded distributions (like Uniform) a large sample will at least get close, for unbounded distributions (like Normal or Exponential) you don't get close at all. There, the true maximum is infinite, meaning your sample maximum simply drifts upward indefinitely as sample size grows, never converging to a fixed number.
+
+```{r}
+#| label: max-sampling-bias
+
+set.seed(1)
+true_ceiling <- 100
+n <- 100
+m_experiments <- 5000
+
+# 5,000 independent experiments, each taking n = 10 draws
+sample_maxes <- replicate(m_experiments, max(runif(n, min = 0, max = true_ceiling)))
+
+cat("True Ceiling:          ", true_ceiling, "\n")
+cat("Average Sample Maximum:", round(mean(sample_maxes), 2), "\n")
+cat("How often max >= 100:  ", sum(sample_maxes >= true_ceiling), "times\n")
+```
