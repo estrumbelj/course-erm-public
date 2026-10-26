@@ -39,6 +39,6 @@ boot
 ```
 To receive a **PASS** in initial screening:
 
-* The project opens cleanly via `hw-02.Rproj` with no absolute path calls.
+* The project opens cleanly via `hw-03.Rproj` with no absolute path calls.
 * `.qmd` renders to completion in reasonable time and with zero errors.
 * The generated output is a clean, 1-page PDF document containing the captioned figure.
