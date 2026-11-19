@@ -134,7 +134,6 @@ grid_pred <- penguins_clean |>
   group_by(species) |>
   reframe(
     body_mass_g   = seq(min(body_mass_g), max(body_mass_g), length.out = 200),
-    bill_depth_mm = median(penguins_clean$bill_depth_mm)
   )
 
 grid_pred$pred_prob <- predict(fit_logit, newdata = grid_pred, type = "response")
@@ -397,3 +396,4 @@ p_gamma_toy <- ggplot() +
   )
 
 print(p_gamma_toy)
+

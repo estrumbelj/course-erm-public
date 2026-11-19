@@ -25,7 +25,7 @@ Using the provided dataset `insects.csv` (toy dataset, containing trap catch cou
 ## Required Project Structure
 
 ```text
-erm-portfolio-[student_id]/hw-04/
+erm-portfolio-[student_id]/hw-06/
 ├── hw-06.Rproj              # Mandatory project root anchor
 ├── data/
 │   └── insects.csv          # Raw dataset
