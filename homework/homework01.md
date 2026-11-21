@@ -6,11 +6,11 @@ Group by `shot_type` and `movement` and compute:
    * Total attempts ($n$)
    * Mean distance (m)
    * Mean angle (degrees)
-   * Standard error of angle ($\text{SE} = \frac{\text{SD}}{\sqrt{n}}$)
+   * Standard error of mean angle ($\text{SE} = \frac{\text{SD}}{\sqrt{n}}$)
 
 Display the output as a formatted table.
 
-F1rmalize the sample standard error in displayed LaTeX: $$\text{SE}(\bar{x}) = \frac{s}{\sqrt{n}} = \sqrt{\frac{\sum_{i=1}^n (x_i - \bar{x})^2}{n(n-1)}}$$. 
+Formalize the sample standard error in displayed LaTeX: $$\text{SE}(\bar{x}) = \frac{s}{\sqrt{n}} = \sqrt{\frac{\sum_{i=1}^n (x_i - \bar{x})^2}{n(n-1)}}$$. 
 
 Visualize the relationship between **shot distance** and **shot angle**, segmented by `shot_type`. Provide a 3-sentence substantive interpretation of the relationship.
 
