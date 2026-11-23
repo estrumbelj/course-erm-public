@@ -141,7 +141,7 @@ grid_pred$pred_prob <- predict(fit_logit, newdata = grid_pred, type = "response"
 # Plot: Observed individuals (by sex at y = 0 and y = 1) with fitted logistic S-curves
 p_logit_sex <- ggplot() +
   # 50% decision boundary threshold
-  geom_hline(yintercept = 0.5, linetype = "dashed", color = "gray60", linewidth = 0.7) +
+  geom_hline(yintercept = mean(penguins_clean$sex_male), linetype = "dashed", color = "gray60", linewidth = 0.7) +
   
   # Observed data: jittered slightly vertically at 0 (female) and 1 (male)
   geom_jitter(
