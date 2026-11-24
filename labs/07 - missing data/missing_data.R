@@ -1,6 +1,3 @@
-# ==============================================================================
-# LECTURE DEMO: Missing Data in Action (MAR Regime)
-# ==============================================================================
 library(palmerpenguins)
 library(dplyr)
 library(tidyr)
@@ -10,7 +7,7 @@ library(mice)
 set.seed(1)
 
 # ==============================================================================
-# STAGE 0: Ground Truth Benchmark (Clean, Complete Data)
+# 0: Penguins dataset; modeling penguin body_mass_g
 # ==============================================================================
 
 penguins_clean <- penguins |>
@@ -27,9 +24,8 @@ true_ci    <- confint(fit_true)["flipper_length_mm", ]
 cat("Full Data Slope (flipper_length_mm):", round(true_slope, 2), "\n")
 cat("95% Benchmark CI: [", round(true_ci[1], 2), ",", round(true_ci[2], 2), "]\n\n")
 
-
 # ==============================================================================
-# STAGE 1: Generate Incomplete Dataset under Strong MAR
+# 1: Generate Incomplete Dataset under Strong MAR
 # Mechanism: Heavy penguins are far less likely to have flipper measured.
 # P(M = 1 | body_mass_g) depends strongly on observed body mass.
 # ==============================================================================
@@ -44,9 +40,8 @@ cat("Total observations:", n, "\n")
 cat("Missing flipper records:", sum(is.na(penguins_mar$flipper_length_mm)), 
     sprintf("(%.1f%% missing)\n\n", 100 * mean(is.na(penguins_mar$flipper_length_mm))))
 
-
 # ==============================================================================
-# STAGE 2: Complete-Case Analysis (Listwise Deletion)
+# 2: Complete-Case Analysis
 # ==============================================================================
 # Using only complete cases biases the slope downward
 
@@ -59,10 +54,9 @@ cat("95% CI: [", round(cc_ci[1], 2), ",", round(cc_ci[2], 2), "]\n")
 cat("Bias vs. Full Dataset:", round(cc_slope - true_slope, 2), "\n")
 
 # ==============================================================================
-# STAGE 3: Unconditional Single Mean Imputation
+# 3: Single Mean Imputation
 # ==============================================================================
-# Imputing with the mean decreases the slobe substantially, while falsely deflating
-# standard error.
+# Imputing with the mean decreases the slobe substantially.
 
 mean_flipper <- mean(penguins_mar$flipper_length_mm, na.rm = TRUE)
 df_mean <- penguins_mar |>
@@ -76,11 +70,12 @@ cat("Mean Imputation Slope:", round(mean_slope, 2), "\n")
 cat("95% CI: [", round(mean_ci[1], 2), ",", round(mean_ci[2], 2), "]\n")
 cat("Bias vs. Full Dataset:", round(mean_slope - true_slope, 2), "\n")
 plot(df_mean$flipper_length_mm, df_mean$body_mass_g)
-abline(900 + 17.164 * 103.678, mean_slope, col = "purple", lwd = 2) 
-abline(900 + 17.164 * 103.678 + 511, mean_slope, col = "darkgreen", lwd = 2) # sl# slope for Adelie female
+abline(900 + 17.164 * 103.678, mean_slope, col = "purple", lwd = 2)  # slope for Adelie female
+abline(900 + 17.164 * 103.678 + 511, mean_slope, col = "darkgreen", lwd = 2) # slope for Adelie male
+
+
 # ==============================================================================
-# STAGE 4: Diagnostic — Is it MCAR? (Logistic Regression on Missingness)
-# Before running MICE, show empirically that missingness is NOT MCAR.
+# 4: Is it MCAR? (Logistic Regression on Missingness)
 # ==============================================================================
 # In practice, we would not have a complete dataset to compare to. Instead, we 
 # should diagnose if it is indeed MCAR. Under MCAR, M should be independent of 
@@ -111,9 +106,8 @@ cat(sprintf("Model Prediction Accuracy: %.1f%% (95%% CI: ±%.1f%%)\n",
             100 * model_acc, 100 * margin))
 
 # ==============================================================================
-# STAGE 5: MICE with Rubin's Rules (m = 20, PMM)
+# 5: MICE with Rubin's Rules (m = 20, PMM)
 # ==============================================================================
-
 imp_mice <- mice(penguins_mar, m = 20, method = "pmm", printFlag = FALSE, seed = 1)
 
 # 1. Pre-allocate an empty list for the m models
@@ -138,11 +132,14 @@ cat("95% CI (Rubin's Rules): [", round(mice_ci[1], 2), ",", round(mice_ci[2], 2)
 cat("Bias vs. Full Dataset:", round(mice_slope - true_slope, 2), "\n")
 
 # ==============================================================================
-# STAGE 6: Bootstrap Before Imputation (B = 200, m = 1 pass per bootstrap sample)
+# 6: Bootstrap Before Imputation (B = 200, m = 1 pass per bootstrap sample)
 # ==============================================================================
-B <- 200
+# As a computational alternative to combining multiple imputations with Rubin's rules,
+# we can first create bootstrap replications and then impute each bootstrap replicationj.
+# Bootstrap accounts for sampling uncertainty while multiple imputations account for 
+# the imputation uncertainty.
 
-# Pre-allocate vector for the B bootstrap estimates
+B <- 200
 boot_slopes <- numeric(B)
 
 for (b in 1:B) {
